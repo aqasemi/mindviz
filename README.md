@@ -9,7 +9,7 @@
 - [Acknowledgement](#acknowledgement)
 
 ## Introduction
-This is the official implementation for [Bridging the Vision-Brain Gap with an Uncertainty-Aware Blur Prior](https://arxiv.org/abs/2503.04207) (CVPR 2025) with various brain and CLIP encoders. SOTA result in the EEG-Vision Retrieval Task.
+This is the official implementation for [Bridging the Vision-Brain Gap with an Uncertainty-Aware Blur Prior](https://arxiv.org/abs/2503.04207) (CVPR 2025) with various brain and CLIP encoders. **SOTA** result in the EEG-Vision Retrieval Task.
 
 <p align="center">
 <img src="./assets/motivation.png" >
