@@ -1,4 +1,5 @@
 # Uncertainty-aware Blur Prior (UBP)
+SOTA result in the EEG-Vision Retrieval Task.
 
 ## Table of Contents
 - [Introduction](#introduction)
