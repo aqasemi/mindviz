@@ -112,11 +112,12 @@ Uncertainy-aware work related to multimodality:
 ## Citation
 If you find our work helpful, please cite:
 ```bibtex
-@InProceedings{Wu2025UBP,
-    title = {Bridging the Vision-Brain Gap with an Uncertainty-Aware Blur Prior},
-    author = {Wu, Haitao and Li, Qing and Zhang, Changqing and He, Zhen and Ying, Xiaomin},
-    booktitle = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
-    year = {2025}
+@inproceedings{wu2025bridging,
+  title={Bridging the Vision-Brain Gap with an Uncertainty-Aware Blur Prior},
+  author={Wu, Haitao and Li, Qing and Zhang, Changqing and He, Zhen and Ying, Xiaomin},
+  booktitle={Proceedings of the Computer Vision and Pattern Recognition Conference},
+  pages={2246--2257},
+  year={2025}
 }
 ```
 
