@@ -1,9 +1,6 @@
 timesteps: [0,250]
 
-blur_kernel_size: 51
-system_g: 3
-
-name: "${exp_setting}_ubp_${brain_backbone}_${vision_backbone}"
+name: "${dataset}_${exp_setting}_baseline_${brain_backbone}_${vision_backbone}"
 
 models:
   brain:
@@ -20,16 +17,10 @@ data:
   train_batch_size: 1024
   val_batch_size: 200
   test_batch_size: 200
-  uncertainty_aware: True
+  uncertainty_aware: False
   blur_type:
-    target: base.inpating_data.FoveaBlur
-    params:
-          h: 224
-          w: 224
-          blur_kernel_size: ${blur_kernel_size}
-          curve_type: exp
-          system_g:  ${system_g}
-
+    target: base.inpating_data.DirectT
+    params: {}
   train_avg: True
   test_avg: True
   timesteps: ${timesteps}
@@ -38,5 +29,5 @@ train:
   epoch: ${epoch}
   optimizer: AdamW
   lr: ${lr}
-  
+
 save_dir: 'exp'

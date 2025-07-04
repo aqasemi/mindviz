@@ -1,18 +1,18 @@
-timesteps: [0,250]
+timesteps: [0,201]
 
-name: "${exp_setting}_baseline_${brain_backbone}_${vision_backbone}"
+name: "${dataset}_${exp_setting}_baseline_${brain_backbone}_${vision_backbone}"
 
 models:
   brain:
     target: "base.eeg_backbone.${brain_backbone}"
     params:
-        c_num: 17
+        c_num: 271
         z_dim: ${z_dim}
         timesteps: ${timesteps}
 
 data:
-  data_dir: data/things-eeg/Preprocessed_data_250Hz_whiten
-  selected_ch: ['P7', 'P5', 'P3', 'P1','Pz', 'P2', 'P4', 'P6', 'P8', 'PO7', 'PO3', 'POz', 'PO4', 'PO8','O1', 'Oz', 'O2']
+  data_dir: data/things-meg/Preprocessed_data
+  selected_ch: False
   model_type: ${vision_backbone}
   train_batch_size: 1024
   val_batch_size: 200

@@ -2,9 +2,21 @@
 import os
 from PIL import Image
 from torchvision import transforms
+import argparse
 
-data_dir = 'data/things-eeg/Image_set'
-save_dir = 'data/things-eeg/Image_set_Resize'
+def get_args_parser():
+    parser = argparse.ArgumentParser('train', add_help=False)
+    parser.add_argument('--type', type=str)
+    return parser.parse_args()
+
+args = get_args_parser()
+if args.type == 'eeg':
+    data_dir = 'data/things-eeg/Image_set'
+    save_dir = 'data/things-eeg/Image_set_Resize'
+elif args.type == 'meg':
+    data_dir = 'data/things-meg/Image_set'
+    save_dir = 'data/things-meg/Image_set_Resize'
+
 os.makedirs(save_dir,exist_ok=True)
 image_paths = []
 for root, dirs, files in os.walk(data_dir):

@@ -1,6 +1,18 @@
 #!/bin/bash
-# cd /home/xxxxxxxx/multimodal_brain/src/tasks/run
-for subject in {1..10}
+cd /xxxx/Uncertainty-aware-Blur-Prior
+
+## EEG
+# for subject in {1..10}
+# do
+#   python preprocess/process_eeg_whiten.py --subject $subject
+# done
+
+## MEG
+for subject in {1..4}
 do
-  python preprocess/process_eeg_whiten.py --subject $subject
+  python preprocess/process_meg.py --subject $subject
 done
+
+
+# python preprocess/process_resize.py --type eeg
+# python preprocess/process_resize.py --type meg

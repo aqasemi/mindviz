@@ -13,7 +13,7 @@ from torchvision import transforms
 from base.utils import instantiate_from_config, get_device 
 
 
-def load_data(config):
+def load_eeg_data(config):
     exp_setting = config.get('exp_setting', 'intra-subject')
     
     if exp_setting == 'intra-subject':
@@ -112,7 +112,7 @@ class EEGDataset(Dataset):
         self.match_label = np.ones(self.trial_all_subjects, dtype=int)
 
         if  os.path.exists(features_filename):
-            saved_features = torch.load(features_filename)
+            saved_features = torch.load(features_filename, weights_only=False)
             self.img_features = saved_features['img_features']
             self.text_features = saved_features['text_features']
         else:
@@ -140,7 +140,7 @@ class EEGDataset(Dataset):
 
     def load_data(self,data_path):
         logging.info(f"----load {data_path.rsplit('1000HZ',1)[-1]}----")
-        loaded_data = torch.load(data_path)
+        loaded_data = torch.load(data_path, weights_only=False)
         loaded_data['eeg']=torch.from_numpy(loaded_data['eeg'])
         
         if self.selected_ch:

@@ -10,10 +10,10 @@ import itertools
 
 from torch.utils.data import DataLoader, random_split
 from torchvision import transforms
-from utils import instantiate_from_config, get_device 
+from base.utils import instantiate_from_config, get_device 
 
 
-def load_data(config):
+def load_meg_data(config):
     exp_setting = config.get('exp_setting', 'intra-subject')
     
     if exp_setting == 'intra-subject':
@@ -56,13 +56,7 @@ class MEGDataset(Dataset):
         self.name = config['name']
         self.model_type = config['data']['model_type']
         self.selected_ch = config['data']['selected_ch']
-        self.channels = ['Fp1', 'Fp2', 'AF7', 'AF3', 'AFz', 'AF4', 'AF8', 'F7', 'F5', 'F3',
-                        'F1', 'F2', 'F4', 'F6', 'F8', 'FT9', 'FT7', 'FC5', 'FC3', 'FC1', 
-                        'FCz', 'FC2', 'FC4', 'FC6', 'FT8', 'FT10', 'T7', 'C5', 'C3', 'C1',
-                        'Cz', 'C2', 'C4', 'C6', 'T8', 'TP9', 'TP7', 'CP5', 'CP3', 'CP1', 
-                        'CPz', 'CP2', 'CP4', 'CP6', 'TP8', 'TP10', 'P7', 'P5', 'P3', 'P1',
-                        'Pz', 'P2', 'P4', 'P6', 'P8', 'PO7', 'PO3', 'POz', 'PO4', 'PO8',
-                        'O1', 'Oz', 'O2']
+        self.channels = None
         if self.selected_ch == "None":
             self.selected_ch = self.channels
     
@@ -83,7 +77,7 @@ class MEGDataset(Dataset):
 
         data_dir = os.path.join(self.data_dir,'../Image_feature',f"{config['data']['blur_type']['target'].rsplit('.',1)[-1]}")
         os.makedirs(data_dir,exist_ok=True)
-        features_filename = os.path.join(data_dir,f"{self.model_type.replace('/','-')}_{self.name}_{mode}.pt")
+        features_filename = os.path.join(data_dir,f"{self.name}_{mode}.pt")
 
         pretrain_map= {
                 'RN50':{'pretrained':'openai','resize':(224,224)}, #1024 
@@ -95,22 +89,23 @@ class MEGDataset(Dataset):
                 'ViT-g-14':{'pretrained':'laion2b_s34b_b88k','resize':(224,224)}, #1024
                 'ViT-bigG-14':{'pretrained':'laion2b_s39b_b160k','resize':(224,224)}, #1280
             }
-
+        self.c = config['c']
         if self.config['data']['uncertainty_aware']:
             self.blur_transform = {}
-            for shift,tag in zip([-6,0,6],['low','medium','high']):
+            for shift,tag in zip([-self.c,0,self.c],['low','medium','high']):
                 blur_param = config['data']['blur_type']
                 blur_param['params']['blur_kernel_size'] = blur_param['params']['blur_kernel_size']+shift
                 self.blur_transform[tag] = instantiate_from_config(blur_param)
         else:
             self.blur_transform = instantiate_from_config(config['data']['blur_type'])
-        process_term = [transforms.ToTensor(), transforms.Normalize(mean=(0.48145466, 0.4578275, 0.40821073), std=(0.26862954, 0.26130258, 0.27577711))] #transforms.Resize(pretrain_map[self.model_type]['resize']), 
+        process_term = [transforms.ToTensor(), transforms.Normalize(mean=(0.48145466, 0.4578275, 0.40821073), std=(0.26862954, 0.26130258, 0.27577711))]
+
         self.process_transform = transforms.Compose(process_term)
 
         self.match_label = np.ones(self.trial_all_subjects, dtype=int)
 
         if  os.path.exists(features_filename):
-            saved_features = torch.load(features_filename)
+            saved_features = torch.load(features_filename, weights_only=False)
             self.img_features = saved_features['img_features']
             #self.text_features = saved_features['text_features']
         else:
@@ -138,7 +133,7 @@ class MEGDataset(Dataset):
 
     def load_data(self,data_path):
         logging.info(f"----load {data_path.rsplit('1000HZ',1)[-1]}----")
-        loaded_data = torch.load(data_path)
+        loaded_data = torch.load(data_path, weights_only=False)
         loaded_data['eeg']=torch.from_numpy(loaded_data['eeg'])
         
         if self.selected_ch:
@@ -185,6 +180,7 @@ class MEGDataset(Dataset):
             batch_images = set_images[i:i + batch_size]
 
             device = next(self.vlmodel.parameters()).device
+            # print(batch_images[0])
             ele = [self.process_transform(blur_transform(Image.open(os.path.join(self.data_dir,'../Image_set_Resize',img)).convert("RGB"))) for img in batch_images]
 
             image_inputs = torch.stack(ele).to(device)

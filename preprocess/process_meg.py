@@ -1,19 +1,44 @@
 import os
 import mne
-import numpy as np
 import pickle
 import glob
+import torch
+import shutil
+import csv
 import pandas as pd
+import numpy as np
 from collections import Counter
+import argparse
 
-sub = 4
+def get_args_parser():
+    parser = argparse.ArgumentParser('train', add_help=False)
+    parser.add_argument('--subject', type=int)
+    return parser.parse_args()
+
+args = get_args_parser()
+
+sub = args.subject
+project_dir = 'data/things-meg'
+
 
 def save_data(data, output_file):
     with open(output_file, 'wb') as file:
         pickle.dump(data, file, protocol=4)
 
-fif_file = f"/opt/data/private/lq/data/things/things-meg/derivatives/preprocessed/preprocessed_P{sub}-epo.fif"
-output_dir = "/opt/data/private/lq/data/things/things-meg/derivatives/preprocessed_npy"
+fif_file = os.path.join(project_dir,f"ds004212-download/derivatives/preprocessed/preprocessed_P{sub}-epo.fif")
+
+# output_dir = os.path.join(project_dir,"ds004212-download/derivatives/preprocessed_npy")
+
+concept_csv_file_path = os.path.join(project_dir,'../things/THINGS/Metadata/Concept-specific/image_concept_index.csv')
+csv_img_file_path = os.path.join(project_dir,"../things/THINGS/Metadata/Image-specific/image_paths.csv")
+
+origin_img_dir = os.path.join(project_dir,"../things/THINGS/Images/")
+
+training_images_dir = os.path.join(project_dir,"Image_set/training_images")
+test_images_dir = os.path.join(project_dir,"Image_set/test_images")
+
+save_dir = os.path.join(project_dir,f"Preprocessed_data/sub-{format(sub,'02')}")
+
 def read_and_crop_epochs(fif_file):
     epochs = mne.read_epochs(fif_file, preload=True)
     cropped_epochs = epochs.crop(tmin=0, tmax=1.0)
@@ -27,8 +52,7 @@ epochs = epochs[sorted_indices]
 print(len(epochs.events))
 
 
-csv_file_path = '/opt/data/private/lq/data/things/Metadata/Concept-specific/image_concept_index.csv'
-image_concept_df = pd.read_csv(csv_file_path, header=None)
+image_concept_df = pd.read_csv(concept_csv_file_path, header=None)
 print(image_concept_df)
 
 def filter_valid_epochs(epochs, exclude_event_id=999999):
@@ -112,20 +136,12 @@ zs_test_data = reshape_meg_data(zs_test_epochs, num_concepts=200, num_imgs=1, re
 print(zs_test_data.shape)
 
 
-import os
-import shutil
-import csv
-import pandas as pd
-import mne
-import numpy  as np
-csv_img_file_path = "/opt/data/private/lq/data/things/Metadata/Image-specific/image_paths.csv"
-origin_img_dir = "/opt/data/private/lq/data/things/Images/"
-training_images_dir = "/opt/data/private/lq/data/things/tmp-meg/training_images"
-test_images_dir = "/opt/data/private/lq/data/things/tmp-meg/test_images"
+
+
 
 image_df = pd.read_csv(csv_img_file_path, header=None)
 
-concept_csv_file_path = '/opt/data/private/lq/data/things/Metadata/Concept-specific/image_concept_index.csv'
+
 image_concept_df = pd.read_csv(concept_csv_file_path, header=None)
 
 
@@ -167,23 +183,25 @@ for index, row in image_df.iterrows():
     else:
         continue
 
+
+
+img_path_list_training = [path.split('data/things-meg/Image_set/')[1] for path in img_path_list_training]
+img_path_list_test = [path.split('data/things-meg/Image_set/')[1] for path in img_path_list_test]
+
 print('train img', len(img_path_list_training))
 print('test_img', len(img_path_list_test))
 
-import torch
-save_dir = f"/opt/data/private/lq/data/things/tmp-meg/sub-{sub}"
 os.makedirs(save_dir, exist_ok=True)
-
 test_dict = {
     'eeg': zs_test_data.astype(np.float16),
     'img':img_path_list_test,
 }
 torch.save(test_dict, os.path.join(save_dir,'test.pt'),pickle_protocol=5)
 
+print(img_path_list_test)
 
 train_dict = {
     'eeg': training_data.astype(np.float16),
     'img':img_path_list_training,
 }
-file_name_train = 'train.pt'
-torch.save(train_dict, os.path.join(save_dir,file_name_train),pickle_protocol=5)
+torch.save(train_dict, os.path.join(save_dir,'train.pt'),pickle_protocol=5)

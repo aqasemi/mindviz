@@ -56,28 +56,39 @@ pip install -r requirements.txt
 ```
 
 ## Data Preparation
-1. Download the Things-EEG dataset from the [OSF repository](https://osf.io/anp5v/files/osfstorage) and put them in the `data` dir. (We provided the processed EEG data on [BaiduNetdisk](https://pan.baidu.com/s/1JlImvk2fDFwEzUTkf6o9BQ?pwd=u5u7), [GoogleDrive](https://drive.google.com/drive/folders/1oPKgsAoAOMbh5kAAfrgRjJi_FEszAfx2?usp=sharing) and [Huggingface](https://huggingface.co/datasets/Haitao999/things-eeg), MEG data on [BaiduNetdisk](https://pan.baidu.com/s/1XgGuT2JzMKmihvijjIsZ6w?pwd=qpht) or [source repository](https://openneuro.org/datasets/ds004212/versions/2.0.1).
+1. Download the Things-EEG dataset from the [OSF repository](https://osf.io/anp5v/files/osfstorage) and put them in the `data` dir. (We provided the processed EEG data on [BaiduNetdisk](https://pan.baidu.com/s/1JlImvk2fDFwEzUTkf6o9BQ?pwd=u5u7), [GoogleDrive](https://drive.google.com/drive/folders/1oPKgsAoAOMbh5kAAfrgRjJi_FEszAfx2?usp=sharing) and [Huggingface](https://huggingface.co/datasets/Haitao999/things-eeg), MEG data on [BaiduNetdisk](https://pan.baidu.com/s/1XgGuT2JzMKmihvijjIsZ6w?pwd=qpht) or [source repository](https://openneuro.org/datasets/ds004212/versions/2.0.1), Things-image on [OSF repository](https://osf.io/jum2f/files/osfstorage) or [BaiduNetdisk](https://pan.baidu.com/s/1kKhjUBYW74MklZL0cAw_jw?pwd=6645). If the processed data is downloaded, the following two steps can be skipped.
 
-2. Resize the downloaded images using the provided script:
 
-```
-python preprocess/process_resize.py
-```
-
-3. Convert the data to .pt format using the preprocessing script for all subjects:
+2. Convert the data to .pt format using the preprocessing script for all subjects:
 
 ```
 /bin/bash scripts/bash_preprocess.sh
 ```
 
+3. Resize the downloaded images using the provided script:
+
+```
+python preprocess/process_resize.py --type eeg
+python preprocess/process_resize.py --type meg
+```
+
 Finally, we have the directory tree:
 ```
-|-- data
-    |-- things-eeg
-        |-- Image_set
-        |-- Image_set_Resize
-        |-- Raw_data
-        |-- Preprocessed_data_250Hz_whiten
+├── data
+    ├── things-eeg
+        ├── Image_set
+        ├── Image_set_Resize
+        ├── Raw_data (optional)
+        ├── Preprocessed_data_250Hz_whiten
+    ├── things
+        ├── THINGS
+            ├── Images
+            ├── Metadata
+    ├── things-meg
+        ├── Image_set
+        ├── Image_set_Resize
+        ├── ds004212-download (Raw_data, optional)
+        ├── Preprocessed_data
 ```
 ## Run
 To run the experiments using the provided configurations, execute:

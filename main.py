@@ -16,7 +16,8 @@ from scipy.stats import norm
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 
 ##import user lib
-from base.data import load_data
+from base.data_eeg import load_eeg_data
+from base.data_meg import load_meg_data
 from base.utils import update_config , ClipLoss, instantiate_from_config, get_device
 
 device = get_device('auto')
@@ -167,8 +168,10 @@ class PLModel(pl.LightningModule):
         similarity = (eeg_z @ img_z.T)
         top_kvalues, top_k_indices = similarity.topk(5, dim=-1)
         self.all_predicted_classes.append(top_k_indices.cpu().numpy())
-        label =  batch['label']
+        # label =  batch['label']
+        label = torch.arange(0, batch_size).to(self.device)
         self.all_true_labels.extend(label.cpu().numpy())
+
 
         #compute sim and map
         self.match_similarities.extend(similarity.diag().detach().cpu().tolist())
@@ -222,6 +225,13 @@ def main():
         type=str,
         default="baseline.yaml",
         help="path to config which constructs model",
+    )
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default="eeg",
+        choices=["eeg", "meg"],
+        help="Choose dataset: 'eeg' or 'meg'"
     )
 
     parser.add_argument(
@@ -297,7 +307,7 @@ def main():
     os.makedirs(logger.log_dir,exist_ok=True)
     shutil.copy(opt.config, os.path.join(logger.log_dir,opt.config.rsplit('/',1)[-1]))
 
-    train_loader, val_loader, test_loader = load_data(config)
+    train_loader, val_loader, test_loader = load_eeg_data(config) if config['dataset'] == 'eeg' else load_meg_data(config)
 
     print(f"train num: {len(train_loader.dataset)},val num: {len(val_loader.dataset)}, test num: {len(test_loader.dataset)}")
     pl_model = load_model(config, train_loader, test_loader)
