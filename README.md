@@ -57,8 +57,8 @@ pip install -r requirements.txt
 
 ## Data Preparation
 1. Download the Things-EEG dataset from the [OSF repository](https://osf.io/anp5v/files/osfstorage) and put them in the `data` dir. (We provided the processed EEG data on [BaiduNetdisk](https://pan.baidu.com/s/1ouOYO4JAomJBFzuA1-9Uaw?pwd=3eri), [GoogleDrive](https://drive.google.com/drive/folders/1oPKgsAoAOMbh5kAAfrgRjJi_FEszAfx2?usp=sharing) and [Huggingface](https://huggingface.co/datasets/Haitao999/things-eeg), MEG data on [BaiduNetdisk](https://pan.baidu.com/s/1nhW6RwjHUm3AqRi3Fm4Lpw?pwd=9vis) or [source repository](https://openneuro.org/datasets/ds004212/versions/2.0.1), Things-image on [OSF repository](https://osf.io/jum2f/files/osfstorage) or [BaiduNetdisk](https://pan.baidu.com/s/1aMVJCqnrB6dxJi6tFeYh5g?pwd=najz). If the processed data is downloaded, the following two steps can be skipped.
-2. 
-ALL [DATA](https://pan.baidu.com/s/1ZZWBrrp2Ly2ZOBHKT0fmTA?pwd=9j22), things.zip, things-eeg.zip, things-meg.zip is necessary, other files are optional. [Goole Drive](https://drive.google.com/drive/folders/16IpWggTg8gzvQswcPlEnWwfUD83O_79w?usp=sharing).
+
+Recommendation: [ALL DATA](https://pan.baidu.com/s/1ZZWBrrp2Ly2ZOBHKT0fmTA?pwd=9j22), things.zip, things-eeg.zip, things-meg.zip is necessary, other files are optional. [Goole Drive](https://drive.google.com/drive/folders/16IpWggTg8gzvQswcPlEnWwfUD83O_79w?usp=sharing).
 
 3. Convert the data to .pt format using the preprocessing script for all subjects:
 
