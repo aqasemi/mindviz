@@ -17,7 +17,7 @@ class ResidualAdd(nn.Module):
         return  x + self.f(x)
     
 class EEGProjectLayer(nn.Module):
-    def __init__(self,  z_dim,c_num, timesteps, drop_proj=0.3):
+    def __init__(self, z_dim, c_num, timesteps, drop_proj=0.3):
         super(EEGProjectLayer, self).__init__()
         self.z_dim = z_dim
         self.c_num = c_num

@@ -11,7 +11,7 @@ import argparse
 
 def get_args_parser():
     parser = argparse.ArgumentParser('train', add_help=False)
-    parser.add_argument('--subject', type=int)
+    parser.add_argument('--subject', type=int, default=8)
     return parser.parse_args()
 
 args = get_args_parser()
@@ -27,7 +27,7 @@ tmin = -0.2
 tmax = 1.0
 whiten = True
 
-project_dir = 'data/things-eeg'
+project_dir = '/ibex/user/qasemiaa/datasets/things_eeg/'
 
 if whiten:
     save_dir = os.path.join(project_dir,
@@ -104,7 +104,7 @@ def epoch_data(mode,sub):
     img_conditions = []
     for s in range(n_ses):
         ### Load the EEG data and convert it to MNE raw format ###
-        eeg_dir = os.path.join('Raw_data', 'sub-'+
+        eeg_dir = os.path.join('raw_data', 'sub-'+
             format(sub,'02'), 'ses-'+format(s+1,'02'), f"raw_eeg_{mode}.npy")
         eeg_data = np.load(os.path.join(project_dir, eeg_dir),
             allow_pickle=True).item()
@@ -164,7 +164,7 @@ def epoch_data(mode,sub):
 
 
 eeg_test,_,ch_names,times = epoch_data('test',sub)
-eeg_train,img_conditions_train,_,_ = epoch_data('train',sub)
+eeg_train,img_conditions_train,_,_ = epoch_data('training',sub)
 
 if whiten:
     whitened_test, whitened_train =  mvnn(eeg_test, eeg_train)
@@ -187,7 +187,7 @@ del whitened_test
 
 # 'img': duplicated_images,
 # 'label': label,
-img_directory = f'data/things-eeg/Image_set_Resize/test_images'
+img_directory = f'/ibex/user/qasemiaa/datasets/things_eeg/image_set_resize/test_images'
 all_folders = [d for d in os.listdir(img_directory) if os.path.isdir(os.path.join(img_directory, d))]
 all_folders.sort()
 images = []
@@ -197,7 +197,7 @@ for i,folder in enumerate(all_folders):
     folder_path = os.path.join(img_directory, folder)
     all_images = [img for img in os.listdir(folder_path) if img.lower().endswith(('.png', '.jpg', '.jpeg'))]
     all_images.sort()
-    images.extend(os.path.join(folder_path, img).rsplit("Image_set_Resize/")[-1] for img in all_images)
+    images.extend(os.path.join(folder_path, img).rsplit("image_set_resize/")[-1] for img in all_images)
     labels.extend([i for img in all_images])
     texts.extend([img.rsplit('_',1)[0] for img in all_images])
 img_list = np.tile(np.array(images)[:, np.newaxis], (1, 80))
@@ -258,7 +258,7 @@ for i in range(len(np.unique(img_cond))):
     
 del ordered_data
 
-img_directory = f'data/things-eeg/Image_set_Resize/train_images'
+img_directory = f'/ibex/user/qasemiaa/datasets/things_eeg/image_set_resize/training_images'
 all_folders = [d for d in os.listdir(img_directory) if os.path.isdir(os.path.join(img_directory, d))]
 all_folders.sort()
 images = []  
@@ -273,7 +273,7 @@ all_folders):
     folder_path = os.path.join(img_directory, folder)
     all_images = [img for img in os.listdir(folder_path) if img.lower().endswith(('.png', '.jpg', '.jpeg'))]
     all_images.sort()
-    images.extend(os.path.join(folder_path, img).rsplit("Image_set_Resize/")[-1] for img in all_images)
+    images.extend(os.path.join(folder_path, img).rsplit("image_set_resize/")[-1] for img in all_images)
     labels.extend([i for img in all_images])
     texts.extend([img.rsplit('_',1)[0] for img in all_images])
     

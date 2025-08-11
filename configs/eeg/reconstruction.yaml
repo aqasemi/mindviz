@@ -1,0 +1,38 @@
+# Paths to your generated .npz embedding files.
+train_embeddings_path: 'exp/eeg_intra-subject_ubp_EEGProjectLayer_RN50/sub-08_seed0/train_embeddings.npz'
+test_embeddings_path: 'exp/eeg_intra-subject_ubp_EEGProjectLayer_RN50/sub-08_seed0/test_embeddings.npz'
+
+# Paths for pre-computed VAE image latents.
+train_latents_path: 'exp/eeg_intra-subject_ubp_EEGProjectLayer_RN50/sub-08_seed0/train_latents.pt'
+test_latents_path: 'exp/eeg_intra-subject_ubp_EEGProjectLayer_RN50/sub-08_seed0/test_latents.pt'
+
+# Path to the resized image dataset (still needed for creating latents)
+image_dir: '/ibex/user/qasemiaa/datasets/things_eeg/image_set_resize'
+
+# SDXL Model ID from Hugging Face
+sdxl_model_name: "stabilityai/stable-diffusion-xl-base-1.0"
+
+# NEW: Regression Model parameters
+regression_model:
+  latent_channels: 4   
+  latent_size: 128     
+  eeg_dim: 1024        
+  hidden_dim: 2048     # Can be a bit smaller for a Transformer
+  num_layers: 6        # More layers for the Transformer
+  dropout: 0.1
+
+# Training parameters for the regressor
+regression_train:
+  epoch: 120
+  batch_size: 128
+  lr: 3.0e-4
+  use_bf16: True
+  scheduler_t_max: 200 # For cosine scheduler, should match epoch
+
+# Generation parameters
+regression_generate:
+  num_images_to_generate: 10 # How many test images to generate
+
+# Output directory for prior model and reconstructed images
+save_dir: 'exp/reconstruction_regression'
+name: "${dataset}_${exp_setting}_${brain_backbone}_${vision_backbone}_${subjects}"

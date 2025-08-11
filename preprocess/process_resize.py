@@ -4,15 +4,18 @@ from PIL import Image
 from torchvision import transforms
 import argparse
 
-def get_args_parser():
-    parser = argparse.ArgumentParser('train', add_help=False)
-    parser.add_argument('--type', type=str)
-    return parser.parse_args()
+# def get_args_parser():
+#     parser = argparse.ArgumentParser('train', add_help=False)
+#     parser.add_argument('--type', type=str)
+#     return parser.parse_args()
 
-args = get_args_parser()
+# args = get_args_parser()
+class args:
+    type = 'eeg' 
+
 if args.type == 'eeg':
-    data_dir = 'data/things-eeg/Image_set'
-    save_dir = 'data/things-eeg/Image_set_Resize'
+    data_dir = '/ibex/user/qasemiaa/datasets/things_eeg/image_set'
+    save_dir = '/ibex/user/qasemiaa/datasets/things_eeg/image_set_resize'
 elif args.type == 'meg':
     data_dir = 'data/things-meg/Image_set'
     save_dir = 'data/things-meg/Image_set_Resize'
@@ -31,6 +34,6 @@ for path in image_paths:
 
     img = t1(img)
 
-    save_path = os.path.join(save_dir,path.split('/Image_set/',1)[-1])
+    save_path = os.path.join(save_dir,path.split('/image_set/',1)[-1])
     os.makedirs(os.path.dirname(save_path),exist_ok=True)
     img.save(save_path)

@@ -47,7 +47,7 @@ class EEGDataset(Dataset):
     def __init__(self, config, mode):
         self.config= config
         self.data_dir = config['data']['data_dir']
-        # self.img_directory = os.path.join(self.data_dir,'../','Image_set_Resize',f'{mode}_images')
+        # self.img_directory = os.path.join(self.data_dir,'../','image_set_resize',f'{mode}_images')
         # self.all_class_names = [d.split('_',1)[-1] for d in os.listdir(self.img_directory) if os.path.isdir(os.path.join(self.img_directory, d))]
         # self.all_class_names.sort()
         self.subjects = config['data']['subjects']
@@ -116,6 +116,7 @@ class EEGDataset(Dataset):
             self.img_features = saved_features['img_features']
             self.text_features = saved_features['text_features']
         else:
+            print(f"Extracting features and saving to {features_filename}...")
             device = get_device('auto')
             self.vlmodel, self.preprocess,_ = open_clip.create_model_and_transforms(self.model_type, device=f"cuda:{device}",pretrained=pretrain_map[self.model_type]['pretrained'])
             for param in self.vlmodel.parameters():
@@ -181,13 +182,13 @@ class EEGDataset(Dataset):
 
         set_images = list(set(images))
         set_images.sort()
-        batch_size = 128
+        batch_size = 256
         image_features_list = []
         for i in tqdm(range(0, len(set_images), batch_size)):
             batch_images = set_images[i:i + batch_size]
 
             device = next(self.vlmodel.parameters()).device
-            ele = [self.process_transform(blur_transform(Image.open(os.path.join(self.data_dir,'../Image_set_Resize',img)).convert("RGB"))) for img in batch_images]
+            ele = [self.process_transform(blur_transform(Image.open(os.path.join(self.data_dir,'../image_set_resize',img)).convert("RGB"))) for img in batch_images]
 
             image_inputs = torch.stack(ele).to(device)
 
@@ -223,7 +224,7 @@ class EEGDataset(Dataset):
         label = self.loaded_data[subject]['label'][trial_index]
         img_path = self.loaded_data[subject]['img'][trial_index]
 
-        img = 'None' #Image.open(os.path.join(self.data_dir,'../Image_set_Resize',img_path)).convert("RGB")
+        img = 'None' #Image.open(os.path.join(self.data_dir,'../image_set_resize',img_path)).convert("RGB")
     
         match_label = self.match_label[index]
         
