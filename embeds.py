@@ -156,6 +156,7 @@ class PLModel(pl.LightningModule):
         for key, value in model.items():
             setattr(self, f"{key}", value)
         self.criterion = ClipLoss()
+        self.mse_loss  = torch.nn.MSELoss()
 
         self.all_predicted_classes = []
         self.all_true_labels = []
@@ -191,8 +192,11 @@ class PLModel(pl.LightningModule):
         logit_scale = self.brain.logit_scale
         logit_scale = self.brain.softplus(logit_scale)
         
+        alpha = 0.75
         eeg_loss, img_loss, logits_per_image = self.criterion(eeg_z, img_z, logit_scale)
-        total_loss = (eeg_loss.mean() + img_loss.mean()) / 2
+        contrastive_loss = (eeg_loss.mean() + img_loss).mean() / 2
+        mse_loss = self.mse_loss(eeg_z, img_z)
+        total_loss = (mse_loss * alpha + contrastive_loss * (1-alpha)) 
 
         if self.config['data']['uncertainty_aware']:
             diagonal_elements = torch.diagonal(logits_per_image).cpu().detach().numpy()

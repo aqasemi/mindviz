@@ -98,4 +98,4 @@ class ClipLoss(nn.Module):
 
         # total_loss = (image_loss + text_loss) / 2
         
-        return image_loss,text_loss, logits_per_image
+        return image_loss, text_loss, logits_per_image
