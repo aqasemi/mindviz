@@ -70,6 +70,73 @@ def generate_and_save_embeddings_from_model(model, dataloader, save_path, device
     print(f"Embeddings saved to {save_path}")
 
 
+# --- NEW UTILITY FUNCTION: Save Top-10 retrieval images for N samples ---
+def save_top10_retrieval_images_for_samples(model, dataset, save_root, num_samples=10):
+    """
+    For the first `num_samples` items in `dataset`, compute the EEG embedding
+    with the trained model and retrieve top-10 most similar images from the
+    dataset's image embedding gallery. Save the retrieved images under
+    `save_root/retrieval_top10/sample_XXX/`.
+    """
+    os.makedirs(save_root, exist_ok=True)
+
+    # Select the correct image feature dictionary
+    if dataset.config['data'].get('uncertainty_aware', False):
+        # At test time __getitem__ uses 'medium'
+        img_features_dict = dataset.img_features['medium']
+    else:
+        img_features_dict = dataset.img_features
+
+    # Build gallery matrix and corresponding image path list (deterministic order)
+    image_paths = sorted(list(img_features_dict.keys()))
+    image_features = torch.stack([img_features_dict[p] for p in image_paths], dim=0)
+    image_features = image_features / image_features.norm(dim=-1, keepdim=True)
+
+    device = next(model.parameters()).device
+    image_features = image_features.to(device)
+
+    images_base_dir = os.path.join(dataset.data_dir, '../image_set_resize')
+
+    model.eval()
+    with torch.no_grad():
+        for i in range(min(num_samples, len(dataset))):
+            sample = dataset[i]
+            eeg = sample['eeg'].unsqueeze(0).to(device)
+
+            eeg_z = model.brain(eeg)
+            eeg_z = eeg_z / eeg_z.norm(dim=-1, keepdim=True)
+
+            # Similarity against full gallery
+            sims = (eeg_z @ image_features.T).squeeze(0)
+            topk = torch.topk(sims, k=min(10, image_features.shape[0]), dim=-1).indices.tolist()
+
+            # Prepare destination directory
+            dest_dir = os.path.join(save_root, 'retrieval_top10', f'sample_{i:03d}')
+            os.makedirs(dest_dir, exist_ok=True)
+
+            # Optionally save the ground-truth image for reference
+            gt_rel = sample['img_path']
+            gt_src = os.path.join(images_base_dir, gt_rel)
+            gt_dst = os.path.join(dest_dir, f'gt__{os.path.basename(gt_rel)}')
+            try:
+                shutil.copyfile(gt_src, gt_dst)
+            except Exception:
+                pass
+
+            # Save top-10 retrieved images
+            for rank, idx in enumerate(topk, start=1):
+                rel_path = image_paths[idx]
+                src_path = os.path.join(images_base_dir, rel_path)
+                dst_path = os.path.join(dest_dir, f'rank_{rank:02d}__{os.path.basename(rel_path)}')
+                try:
+                    shutil.copyfile(src_path, dst_path)
+                except Exception:
+                    # Skip if file issues occur
+                    continue
+
+    print(f"Saved top-10 retrieval images for {min(num_samples, len(dataset))} samples under {os.path.join(save_root, 'retrieval_top10')}.")
+
+
 def load_model(config, train_loader, test_loader, log_dir):
     """ Modified to accept and set the log_dir for saving files. """
     model = {}
@@ -151,6 +218,10 @@ class PLModel(pl.LightningModule):
         eeg_z, img_z, loss = self(batch,sample_posterior=True)
 
         self.log('train_loss', loss, on_step=True, on_epoch=True,prog_bar=True, logger=True, sync_dist=True, batch_size=batch_size)
+        # Log learning rate
+        lr = self.optimizers().param_groups[0]['lr']
+        self.log('learning_rate', lr, on_step=True, on_epoch=False, prog_bar=True, batch_size=batch_size)
+        
         eeg_z = eeg_z/eeg_z.norm(dim=-1, keepdim=True)
         
         similarity = (eeg_z @ img_z.T)
@@ -190,6 +261,10 @@ class PLModel(pl.LightningModule):
         self.all_predicted_classes.append(top_k_indices.cpu().numpy())
         label = torch.arange(0, batch_size).to(self.device)
         self.all_true_labels.extend(label.cpu().numpy())
+
+        with open('ress.txt', 'a') as outf:
+            outf.write(f"val loss: {loss} ")
+
         return loss
     
     def on_validation_epoch_end(self):
@@ -204,6 +279,9 @@ class PLModel(pl.LightningModule):
         self.log('val_top5_acc', top_k_accuracy, on_step=False, on_epoch=True,prog_bar=True, logger=True, sync_dist=True)
         self.all_predicted_classes = []
         self.all_true_labels = []
+
+        with open('ress.txt', 'a') as outf:
+            outf.write(f"Epoch {self.current_epoch} - Top-1 Accuracy: {top_1_accuracy}, Top-5 Accuracy: {top_k_accuracy}\n")
 
     def test_step(self, batch, batch_idx):
         batch_size = batch['idx'].shape[0]
@@ -300,8 +378,36 @@ class PLModel(pl.LightningModule):
         return {'test_loss': avg_test_loss.item(), 'test_top1_acc': top_1_accuracy.item(), 'test_top5_acc': top_k_accuracy.item(), 'mAP': self.mAP, 'similarity': self.match_similarities}
         
     def configure_optimizers(self):
-        optimizer = globals()[self.config['train']['optimizer']](self.parameters(), lr=self.config['train']['lr'], weight_decay=1e-4)
-        return [optimizer]
+        """
+        Configure the optimizer and the OneCycleLR learning rate scheduler.
+        """
+        # Create the optimizer from the config file
+        optimizer = globals()[self.config['train']['optimizer']](
+            self.parameters(),
+            lr=self.config['train']['lr'],
+            weight_decay=1e-4
+        )
+
+        # The total number of training steps is needed for OneCycleLR.
+        # self.trainer.estimated_stepping_batches is the recommended way to get this
+        # as it automatically handles distributed training, gradient accumulation, etc.
+        total_steps = self.trainer.estimated_stepping_batches
+
+        # Define the OneCycleLR scheduler
+        scheduler = lr_scheduler.OneCycleLR(
+            optimizer,
+            max_lr=self.config['train']['lr'],
+            total_steps=total_steps
+        )
+
+        # Define the scheduler configuration dictionary
+        scheduler_config = {
+            "scheduler": scheduler,
+            "interval": "step",  # The scheduler is called at the end of each training step
+            "frequency": 1,      # The scheduler is called every 1 step
+        }
+
+        return [optimizer], [scheduler_config]
     
 def main():
     parser = argparse.ArgumentParser()
@@ -362,9 +468,15 @@ def main():
     parser.add_argument(
         "--c",
         type=int,
-        default=6,
+        default=10,
         help="c",
     )
+    parser.add_argument(
+        '--version',
+        type=str,
+        default=""
+    )
+
 
     opt = parser.parse_args()
     seed_everything(opt.seed)
@@ -375,6 +487,8 @@ def main():
     pretrain_map = {
         'RN50': {'pretrained': 'openai', 'resize': (224, 224), 'z_dim': 1024},
         'RN101': {'pretrained': 'openai', 'resize': (224, 224), 'z_dim': 512},
+        'convnext_base_w': {'pretrained': 'laion2b_s13b_b82k_augreg', 'resize': (256, 256), 'z_dim': 640},
+        'convnext_large_d_320': {'pretrained': 'laion2B-s29B-b131K-ft', 'resize': (320, 320), 'z_dim': 768},
         'ViT-B-16': {'pretrained': 'laion2b_s34b_b88k', 'resize': (224, 224), 'z_dim': 512},
         'ViT-B-32': {'pretrained': 'laion2b_s34b_b79k', 'resize': (224, 224), 'z_dim': 512},
         'ViT-L-14': {'pretrained': 'laion2b_s32b_b82k', 'resize': (224, 224), 'z_dim': 768},
@@ -387,7 +501,7 @@ def main():
     print(config)
 
     os.makedirs(config['save_dir'], exist_ok=True)
-    logger = TensorBoardLogger(config['save_dir'], name=config['name'], version=f"{'_'.join(config['data']['subjects'])}_seed{config['seed']}")
+    logger = TensorBoardLogger(config['save_dir'], name=config['name'], version=f"{'_'.join(config['data']['subjects'])}_seed{config['seed']}" + (f"_{config['version']}" if config['version'] else ""))
     log_dir = logger.log_dir
     os.makedirs(log_dir, exist_ok=True)
     shutil.copy(opt.config, os.path.join(log_dir, opt.config.rsplit('/', 1)[-1]))
@@ -422,6 +536,10 @@ def main():
         )
         train_save_path = os.path.join(log_dir, 'train_embeddings.npz')
         generate_and_save_embeddings_from_model(pl_model, train_loader_for_generation, train_save_path, device)
+
+        # After training, save top-10 retrieval images for first 10 test samples
+        print("\nSaving top-10 retrieval images for 10 test samples...")
+        save_top10_retrieval_images_for_samples(pl_model, test_loader.dataset, log_dir, num_samples=10)
 
     # Use a barrier to make sure all processes wait for rank 0 to finish saving before testing
     if torch.distributed.is_initialized() and trainer.world_size > 1:

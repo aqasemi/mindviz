@@ -1,7 +1,7 @@
 timesteps: [0,250]
 
 blur_kernel_size: 51
-system_g: 3
+system_g: 6
 
 name: "${dataset}_${exp_setting}_ubp_${brain_backbone}_${vision_backbone}"
 

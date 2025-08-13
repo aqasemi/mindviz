@@ -1,0 +1,55 @@
+# Use a smaller, pre-trained Stable Diffusion model for the VAE. SD 1.5 is a good choice.
+sd_model_name: "runwayml/stable-diffusion-v1-5"
+
+# Paths to your .npz files containing matched EEG and Image embeddings.
+train_data_path: 'exp/eeg_intra-subject_ubp_EEGProjectLayer_RN50/sub-08_seed0/train_embeddings.npz'
+test_data_path: 'exp/eeg_intra-subject_ubp_EEGProjectLayer_RN50/sub-08_seed0/test_embeddings.npz'
+
+# Paths for pre-computed VAE image latents.
+train_latents_path: 'exp/eeg_intra-subject_ubp_EEGProjectLayer_RN50/sub-08_seed0/train_latents_sd15.pt'
+
+# Path to the image dataset
+image_dir: '/ibex/user/qasemiaa/datasets/things_eeg/image_set_resize'
+
+# Configuration for the U-Net model.
+# This should be smaller than a full SD model to train faster.
+unet:
+  in_channels: 4         # Latent channels from VAE
+  out_channels: 4        # Latent channels from VAE
+  cross_attention_dim: 1024 # Your EEG embedding dimension
+  block_out_channels: [320, 640, 1280] # Fewer blocks than full SD
+  down_block_types: [
+    "CrossAttnDownBlock2D",
+    "CrossAttnDownBlock2D",
+    "DownBlock2D"
+  ]
+  up_block_types: [
+    "UpBlock2D",
+    "CrossAttnUpBlock2D",
+    "CrossAttnUpBlock2D"
+  ]
+
+data:
+  train_batch_size: 6
+  test_batch_size: 6
+
+# Training parameters
+train_params:
+  epochs: 20
+  batch_size: 42 # U-Net is memory intensive, reduce batch size
+  lr: 1e-5
+  use_bf16: True
+  warmup_steps: 500
+  validation_split: 0.05
+
+c: 6
+
+# Generation parameters
+generate_params:
+  num_inference_steps: 50
+  guidance_scale: 7.5
+  num_images_to_generate: 200
+
+# Output directory
+save_dir: 'exp/reconstruction_direct_unet'
+name: "${dataset}_${exp_setting}_${brain_backbone}_${vision_backbone}_${subjects}"

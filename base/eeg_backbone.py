@@ -145,3 +145,138 @@ class TSconv(BaseModel):
                 nn.Dropout(0.5),
             )
     
+class EEGTransformerProjector(nn.Module):
+    """
+    Transformer encoder for EEG sequences.
+
+    - Treats EEG as a sequence over time with vectors of channel readings.
+    - Projects per-time-step channel vector C -> d_model.
+    - Adds a learnable [CLS] token and learnable positional embeddings.
+    - Runs a TransformerEncoder and uses the [CLS] representation.
+    - Projects to `z_dim` with a small residual MLP head and LayerNorm.
+
+    Expected input: tensor of shape [batch_size, num_channels, num_timesteps].
+    Output: tensor of shape [batch_size, z_dim].
+    """
+
+    def __init__(
+        self,
+        z_dim: int,
+        c_num: int,
+        timesteps: list,
+        d_model: int = 512,
+        nhead: int = 8,
+        num_layers: int = 6,
+        dropout: float = 0.1,
+        dim_feedforward: int | None = None,
+    ) -> None:
+        super().__init__()
+
+        self.z_dim = z_dim
+        self.c_num = c_num
+        self.timesteps = timesteps
+
+        self.seq_len = int(self.timesteps[1] - self.timesteps[0])
+        self.d_model = int(d_model)
+
+        if dim_feedforward is None:
+            dim_feedforward = self.d_model * 4
+
+        # 1) Per-time-step projection: C -> d_model
+        self.input_projection = nn.Sequential(
+            nn.Linear(self.c_num, self.d_model),
+            nn.GELU(),
+            nn.Dropout(dropout),
+        )
+
+        # 2) Learnable [CLS] token and positional embeddings
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, self.d_model))
+        self.positional_embedding = nn.Parameter(
+            torch.randn(1, self.seq_len + 1, self.d_model) * 0.02
+        )
+        self.input_layernorm = nn.LayerNorm(self.d_model)
+
+        # 3) Transformer encoder
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=self.d_model,
+            nhead=nhead,
+            dim_feedforward=dim_feedforward,
+            dropout=dropout,
+            activation="gelu",
+            batch_first=True,
+            norm_first=True,
+        )
+        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+
+        # 4) Output projection to z_dim with residual MLP and LayerNorm
+        self.output_projection = nn.Sequential(
+            nn.Linear(self.d_model, self.z_dim),
+            ResidualAdd(
+                nn.Sequential(
+                    nn.GELU(),
+                    nn.Linear(self.z_dim, self.z_dim),
+                    nn.Dropout(dropout),
+                )
+            ),
+            nn.LayerNorm(self.z_dim),
+        )
+
+        # For contrastive loss scaling (kept for compatibility with existing training loop)
+        self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
+        self.softplus = nn.Softplus()
+
+        # Initialize parameters
+        self._init_parameters()
+
+    def _init_parameters(self) -> None:
+        nn.init.trunc_normal_(self.cls_token, std=0.02)
+        nn.init.trunc_normal_(self.positional_embedding, std=0.02)
+
+        # Xavier init for linear layers in projections
+        for module in self.modules():
+            if isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight)
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+
+    def forward(self, x: Tensor) -> Tensor:
+        """
+        x: [batch, C, T]
+        returns: [batch, z_dim]
+        """
+        batch_size = x.shape[0]
+
+        # Rearrange to [batch, T, C]
+        x = x.transpose(1, 2).contiguous()
+
+        # Ensure time dimension matches configured window
+        if x.size(1) != self.seq_len:
+            # If input time dimension differs, center-crop or pad to match
+            # Here we simple slice or pad zeros at the end for safety
+            if x.size(1) > self.seq_len:
+                x = x[:, : self.seq_len, :]
+            else:
+                pad_len = self.seq_len - x.size(1)
+                pad = x.new_zeros(batch_size, pad_len, x.size(2))
+                x = torch.cat([x, pad], dim=1)
+
+        # Project per time step: [B, T, C] -> [B, T, d_model]
+        x = self.input_projection(x)
+        x = self.input_layernorm(x)
+
+        # Prepend [CLS]
+        cls_tokens = self.cls_token.expand(batch_size, -1, -1)  # [B, 1, d_model]
+        x = torch.cat([cls_tokens, x], dim=1)  # [B, T+1, d_model]
+
+        # Add positional embeddings
+        x = x + self.positional_embedding
+
+        # Transformer encoding
+        x = self.transformer(x)
+
+        # Take [CLS] token
+        cls_representation = x[:, 0, :]  # [B, d_model]
+
+        # Project to z_dim
+        z = self.output_projection(cls_representation)
+        return z

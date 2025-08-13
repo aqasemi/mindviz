@@ -42,9 +42,10 @@ def set_seed(seed):
 def update_config(args, config):
     for key in config.keys():
         if hasattr(args, key):
-            if getattr(args, key) != None:
+            if getattr(args, key) != None or key == "train":
                 config[key] = getattr(args, key)
     for key in args.__dict__.keys():
+        if key == "train": continue
         config[key]=getattr(args, key)
     return config
 

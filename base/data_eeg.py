@@ -76,7 +76,7 @@ class EEGDataset(Dataset):
         self.per_trials = 4 if self.mode=='train' else 80
 
         self.data_paths = [os.path.join(self.data_dir,subject,f'{mode}.pt') for subject in self.subjects]
-        self.loaded_data= [self.load_data(data_path) for data_path in self.data_paths]
+        self.loaded_data = [self.load_data(data_path) for data_path in self.data_paths]
         
         self.trial_subject = self.loaded_data[0]['eeg'].shape[0]
         self.trial_all_subjects = self.trial_subject*len(self.subjects)
@@ -95,6 +95,8 @@ class EEGDataset(Dataset):
                 'ViT-H-14':{'pretrained':'laion2b_s32b_b79k','resize':(224,224)}, #1024
                 'ViT-g-14':{'pretrained':'laion2b_s34b_b88k','resize':(224,224)}, #1024
                 'ViT-bigG-14':{'pretrained':'laion2b_s39b_b160k','resize':(224,224)}, #1280
+                'convnext_base_w': {'pretrained': 'laion2b_s13b_b82k_augreg', 'resize': (256, 256)},
+                'convnext_large_d_320': {'pretrained': 'laion2B-s29B-b131K-ft', 'resize': (320, 320), 'z_dim': 1024},
             }
 
         self.c = config['c']
@@ -108,6 +110,10 @@ class EEGDataset(Dataset):
             self.blur_transform = instantiate_from_config(config['data']['blur_type'])
         process_term = [transforms.ToTensor(), transforms.Normalize(mean=(0.48145466, 0.4578275, 0.40821073), std=(0.26862954, 0.26130258, 0.27577711))] #transforms.Resize(pretrain_map[self.model_type]['resize']), 
         self.process_transform = transforms.Compose(process_term)
+
+        vae_imgs_term = [transforms.ToTensor(), transforms.Normalize([0.5], [0.5])] #transforms.Resize(pretrain_map[self.model_type]['resize']), 
+        self.vae_transform = transforms.Compose(vae_imgs_term)
+
 
         self.match_label = np.ones(self.trial_all_subjects, dtype=int)
 
@@ -224,7 +230,10 @@ class EEGDataset(Dataset):
         label = self.loaded_data[subject]['label'][trial_index]
         img_path = self.loaded_data[subject]['img'][trial_index]
 
-        img = 'None' #Image.open(os.path.join(self.data_dir,'../image_set_resize',img_path)).convert("RGB")
+        img = Image.open(os.path.join(self.data_dir,'../image_set_resize',img_path)).convert("RGB")
+
+        # convert img to tensor and normalize
+        img = self.vae_transform(img)
     
         match_label = self.match_label[index]
         
