@@ -14,21 +14,16 @@ models:
         timesteps: ${timesteps}
 
 data:
-  data_dir: /ibex/user/qasemiaa/datasets/things_eeg/Preprocessed_data_250Hz_whiten
+  data_dir: /root/mjo/datasets/things-eeg/Preprocessed_data_250Hz_whiten
   selected_ch: ['P7', 'P5', 'P3', 'P1','Pz', 'P2', 'P4', 'P6', 'P8', 'PO7', 'PO3', 'POz', 'PO4', 'PO8','O1', 'Oz', 'O2']
   model_type: ${vision_backbone}
   train_batch_size: 1024
   val_batch_size: 200
   test_batch_size: 200
-  uncertainty_aware: True
+  uncertainty_aware: False
   blur_type:
-    target: base.inpating_data.FoveaBlur
-    params:
-          h: 224
-          w: 224
-          blur_kernel_size: ${blur_kernel_size}
-          curve_type: exp
-          system_g:  ${system_g}
+    target: base.inpating_data.DirectT
+    params: {}
 
   train_avg: True
   test_avg: True

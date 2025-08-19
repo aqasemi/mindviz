@@ -3,6 +3,7 @@ from omegaconf import OmegaConf
 from pytorch_lightning import seed_everything, Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint
 import torch
+import torch.nn as nn
 from pytorch_lightning.strategies import DDPStrategy
 from pytorch_lightning.loggers import TensorBoardLogger
 import shutil
@@ -24,7 +25,48 @@ from base.utils import update_config , ClipLoss, instantiate_from_config, get_de
 device = get_device('auto')
 print(f"Using device: {device}")
 
-# --- NEW UTILITY FUNCTION ---
+class ResidualMLPBlock(nn.Module):
+    """Residual MLP block used in the EEG denoise adapter."""
+    def __init__(self, dim: int, hidden_dim: int, dropout: float = 0.1) -> None:
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.LayerNorm(dim),
+            nn.Linear(dim, hidden_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, dim),
+            nn.Dropout(dropout),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x + self.net(x)
+
+class EEGDenoiseAdapterMLP(nn.Module):
+    """
+    A small residual MLP adapter to map EEG backbone outputs to CLIP-like embeddings.
+    Serves as a learnable denoiser/adapter placed after the EEG backbone.
+    """
+    def __init__(
+        self,
+        z_dim: int,
+        hidden_dim: int = None,
+        num_layers: int = 2,
+        dropout: float = 0.1,
+    ) -> None:
+        super().__init__()
+        if hidden_dim is None:
+            hidden_dim = max(256, 2 * z_dim)
+        blocks = [ResidualMLPBlock(z_dim, hidden_dim, dropout) for _ in range(num_layers)]
+        self.blocks = nn.Sequential(*blocks)
+        self.pre_norm = nn.LayerNorm(z_dim)
+        self.post_norm = nn.LayerNorm(z_dim)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.pre_norm(x)
+        x = self.blocks(x)
+        x = self.post_norm(x)
+        return x
+
 def generate_and_save_embeddings_from_model(model, dataloader, save_path, device):
     """
     Generates embeddings for a dataset using a trained model and saves them.
@@ -104,6 +146,8 @@ def save_top10_retrieval_images_for_samples(model, dataset, save_root, num_sampl
             eeg = sample['eeg'].unsqueeze(0).to(device)
 
             eeg_z = model.brain(eeg)
+            if hasattr(model, 'adapter') and model.adapter is not None:
+                eeg_z = model.adapter(eeg_z)
             eeg_z = eeg_z / eeg_z.norm(dim=-1, keepdim=True)
 
             # Similarity against full gallery
@@ -179,6 +223,25 @@ class PLModel(pl.LightningModule):
         self.test_img_embeddings = []
         self.test_indices = []
         
+        # Create adapter if not provided by config-instantiated modules
+        if not hasattr(self, 'adapter') or self.adapter is None:
+            # Read optional adapter hyperparameters from config if available
+            adapter_cfg = {}
+            try:
+                if 'adapter' in self.config:
+                    adapter_cfg = self.config['adapter']
+            except Exception:
+                adapter_cfg = {}
+            hidden_dim = adapter_cfg.get('hidden_dim', None)
+            num_layers = adapter_cfg.get('num_layers', 2)
+            dropout = adapter_cfg.get('dropout', 0.1)
+            self.adapter = EEGDenoiseAdapterMLP(
+                z_dim=self.z_dim,
+                hidden_dim=hidden_dim,
+                num_layers=num_layers,
+                dropout=dropout,
+            )
+        
 
     def forward(self, batch, sample_posterior=False):
         idx = batch['idx'].cpu().detach().numpy() 
@@ -187,12 +250,14 @@ class PLModel(pl.LightningModule):
         img_z = batch['img_features']
         
         eeg_z = self.brain(eeg)
+        # Pass EEG through adapter to obtain CLIP-like embeddings
+        eeg_z = self.adapter(eeg_z)
         img_z = img_z/img_z.norm(dim=-1, keepdim=True)
 
         logit_scale = self.brain.logit_scale
         logit_scale = self.brain.softplus(logit_scale)
         
-        alpha = 0.75
+        alpha = 0.9
         eeg_loss, img_loss, logits_per_image = self.criterion(eeg_z, img_z, logit_scale)
         contrastive_loss = (eeg_loss.mean() + img_loss).mean() / 2
         mse_loss = self.mse_loss(eeg_z, img_z)

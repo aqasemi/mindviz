@@ -14,8 +14,8 @@ class args:
     type = 'eeg' 
 
 if args.type == 'eeg':
-    data_dir = '/ibex/user/qasemiaa/datasets/things_eeg/image_set'
-    save_dir = '/ibex/user/qasemiaa/datasets/things_eeg/image_set_resize'
+    data_dir = '/root/mjo/datasets/things-eeg/image_set/test_images/'
+    save_dir = '/root/mjo/datasets/things-eeg/image_set_resize/test_images/'
 elif args.type == 'meg':
     data_dir = 'data/things-meg/Image_set'
     save_dir = 'data/things-meg/Image_set_Resize'

@@ -27,7 +27,7 @@ tmin = -0.2
 tmax = 1.0
 whiten = True
 
-project_dir = '/ibex/user/qasemiaa/datasets/things_eeg/'
+project_dir = '/root/mjo/datasets/things-eeg/'
 
 if whiten:
     save_dir = os.path.join(project_dir,
@@ -187,7 +187,7 @@ del whitened_test
 
 # 'img': duplicated_images,
 # 'label': label,
-img_directory = f'/ibex/user/qasemiaa/datasets/things_eeg/image_set_resize/test_images'
+img_directory = f'/root/mjo/datasets/things-eeg/image_set_resize/test_images'
 all_folders = [d for d in os.listdir(img_directory) if os.path.isdir(os.path.join(img_directory, d))]
 all_folders.sort()
 images = []
@@ -258,7 +258,7 @@ for i in range(len(np.unique(img_cond))):
     
 del ordered_data
 
-img_directory = f'/ibex/user/qasemiaa/datasets/things_eeg/image_set_resize/training_images'
+img_directory = f'/root/mjo/datasets/things-eeg/image_set_resize/training_images'
 all_folders = [d for d in os.listdir(img_directory) if os.path.isdir(os.path.join(img_directory, d))]
 all_folders.sort()
 images = []  
