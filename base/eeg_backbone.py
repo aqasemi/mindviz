@@ -280,3 +280,78 @@ class EEGTransformerProjector(nn.Module):
         # Project to z_dim
         z = self.output_projection(cls_representation)
         return z
+
+
+class TemporalConvTransformerEEG(nn.Module):
+    """
+    Temporal feature extractor for EEG.
+
+    Pipeline:
+    - 1D temporal convolutions to downsample and extract local features
+    - TransformerEncoder over the temporal dimension
+    - Global average pooling over time
+    - Projection MLP to `z_dim` (default aligns with vision embedding dim)
+
+    Expected input: [batch_size, num_channels, num_timesteps]
+    Output: [batch_size, z_dim]
+    """
+
+    def __init__(
+        self,
+        z_dim: int,
+        c_num: int,
+        timesteps: list,
+        hidden_dim: int = 256,
+        proj_dim: int | None = None,
+        nhead: int = 8,
+        num_layers: int = 2,
+    ) -> None:
+        super().__init__()
+
+        self.z_dim = int(z_dim)
+        self.c_num = int(c_num)
+        self.timesteps = timesteps
+        if proj_dim is None:
+            proj_dim = self.z_dim
+
+        # Temporal conv backbone
+        self.conv = nn.Sequential(
+            nn.Conv1d(self.c_num, 64, kernel_size=7, stride=2, padding=3),
+            nn.GELU(),
+            nn.Conv1d(64, 128, kernel_size=5, stride=2, padding=2),
+            nn.GELU(),
+            nn.Conv1d(128, hidden_dim, kernel_size=3, stride=2, padding=1),
+            nn.GELU(),
+        )
+
+        # Transformer encoder for sequence modeling
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=hidden_dim, nhead=nhead, batch_first=True
+        )
+        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+
+        # Projection head
+        self.proj = nn.Sequential(
+            nn.Linear(hidden_dim, proj_dim),
+            nn.GELU(),
+            nn.LayerNorm(proj_dim),
+            nn.Linear(proj_dim, proj_dim),
+        )
+
+        # For contrastive loss scaling (kept for compatibility with existing training loop)
+        self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
+        self.softplus = nn.Softplus()
+
+    def forward(self, x: Tensor) -> Tensor:
+        """
+        x: [batch, channels, time]
+        returns: [batch, z_dim]
+        """
+        h = self.conv(x)                 # [B, hidden_dim, T']
+        h = h.permute(0, 2, 1)           # [B, T', hidden_dim]
+        h = self.transformer(h)          # [B, T', hidden_dim]
+        h = h.mean(dim=1)                # [B, hidden_dim]
+        z = self.proj(h)                 # [B, z_dim]
+        # Normalize; training loop also normalizes, but this is harmless
+        z = z / (z.norm(dim=-1, keepdim=True) + 1e-6)
+        return z
