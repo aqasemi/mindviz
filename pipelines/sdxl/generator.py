@@ -34,6 +34,73 @@ class SDXLGenerator:
 
         self.pipe = pipe
 
+    def _call_with_added_kwargs(
+        self,
+        prompt: str,
+        image_embeds: torch.Tensor,
+        num_inference_steps: int,
+        guidance_scale: float,
+        generator: Optional[torch.Generator],
+        height: Optional[int],
+        width: Optional[int],
+        negative_prompt: Optional[str],
+    ):
+        pipe = self.pipe
+        device = pipe._execution_device
+
+        # 1) Encode prompt to get token-level and pooled embeddings
+        (
+            prompt_embeds,
+            negative_prompt_embeds,
+            pooled_prompt_embeds,
+            negative_pooled_prompt_embeds,
+        ) = pipe.encode_prompt(
+            prompt=prompt,
+            device=device,
+            num_images_per_prompt=1,
+            do_classifier_free_guidance=guidance_scale > 1.0,
+            negative_prompt=negative_prompt,
+            prompt_embeds=None,
+            negative_prompt_embeds=None,
+            pooled_prompt_embeds=None,
+            negative_pooled_prompt_embeds=None,
+            clip_skip=getattr(pipe, "clip_skip", None),
+        )
+
+        # 2) Prepare time ids
+        if height is None:
+            height = pipe.default_sample_size * pipe.vae_scale_factor
+        if width is None:
+            width = pipe.default_sample_size * pipe.vae_scale_factor
+
+        text_encoder_projection_dim = (
+            int(pooled_prompt_embeds.shape[-1]) if pipe.text_encoder_2 is None else pipe.text_encoder_2.config.projection_dim
+        )
+        add_time_ids = pipe._get_add_time_ids(
+            original_size=(height, width),
+            crops_coords_top_left=(0, 0),
+            target_size=(height, width),
+            dtype=prompt_embeds.dtype,
+            text_encoder_projection_dim=text_encoder_projection_dim,
+        )
+
+        # 3) Build added conditions dict with image_embeds
+        added = {"text_embeds": pooled_prompt_embeds, "time_ids": add_time_ids, "image_embeds": image_embeds}
+
+        # 4) Call pipeline using explicit embeddings and added conditions
+        result = pipe(
+            prompt=None,
+            prompt_embeds=prompt_embeds,
+            pooled_prompt_embeds=pooled_prompt_embeds,
+            num_inference_steps=num_inference_steps,
+            guidance_scale=guidance_scale,
+            generator=generator,
+            height=height,
+            width=width,
+            added_cond_kwargs=added,
+        )
+        return result.images
+
     @torch.no_grad()
     def generate(
         self,
@@ -94,11 +161,26 @@ class SDXLGenerator:
         except ValueError as e:
             last_err = e
 
-        # If neither works, raise a clear error
+        # Try explicit embeddings path that constructs added_cond kwargs
+        try:
+            return self._call_with_added_kwargs(
+                prompt=prompt,
+                image_embeds=image_embeds,
+                num_inference_steps=num_inference_steps,
+                guidance_scale=guidance_scale,
+                generator=generator,
+                height=height,
+                width=width,
+                negative_prompt=negative_prompt,
+            )
+        except Exception as e:
+            last_err = e
+
+        # If nothing works, raise a clear error
         raise RuntimeError(
             (
                 "Failed to pass IP-Adapter embeddings to SDXL pipeline. "
                 "Tried ip_adapter_embeds, image_embeds, added_cond_kwargs, added_conditions. "
-                "Please upgrade diffusers or adapt argument names."
+                "Also attempted explicit added_cond construction. Please upgrade diffusers or adapt argument names."
             ) + (f" Last error: {last_err}" if 'last_err' in locals() else "")
         )
