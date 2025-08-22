@@ -1,4 +1,5 @@
 import os
+import re
 import argparse
 import torch
 from PIL import Image
@@ -30,6 +31,22 @@ def main():
     img_paths = data.get('img_paths') if isinstance(data, np.lib.npyio.NpzFile) else None
     # Optional: use img embeddings for debugging quality
     # img = torch.from_numpy(data['img_embeddings']).float()
+
+    # Prepare numbered GT list if requested
+    numbered_gt_paths = None
+    if args.images_root is not None and os.path.isdir(args.images_root):
+        exts = {'.png', '.jpg', '.jpeg', '.webp'}
+
+        def natural_key(name: str):
+            m = re.search(r"(\d+)", os.path.basename(name))
+            return int(m.group(1)) if m else name
+
+        candidates = [
+            os.path.join(args.images_root, f)
+            for f in os.listdir(args.images_root)
+            if os.path.splitext(f.lower())[1] in exts
+        ]
+        numbered_gt_paths = sorted(candidates, key=natural_key) if candidates else None
 
     # Load projector
     ckpt = torch.load(args.weights, map_location='cpu')
@@ -80,6 +97,8 @@ def main():
                                 if os.path.exists(full):
                                     gt_img = Image.open(full).convert('RGB')
                                     break
+                elif numbered_gt_paths is not None and i < len(numbered_gt_paths):
+                    gt_img = Image.open(numbered_gt_paths[i]).convert('RGB')
             except Exception:
                 gt_img = None
 
