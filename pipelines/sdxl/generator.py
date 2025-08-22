@@ -114,9 +114,10 @@ class SDXLGenerator:
         negative_prompt: Optional[str] = None,
     ):
         image_embeds = image_embeds.to(device=self.device, dtype=self.dtype)
-        # Try modern diffusers API first; fall back to alternative arg names
-        call_kwargs = dict(
+        # Explicit added conditions path to satisfy ip_image_proj
+        return self._call_with_added_kwargs(
             prompt=prompt,
+            image_embeds=image_embeds,
             num_inference_steps=num_inference_steps,
             guidance_scale=guidance_scale,
             generator=generator,
@@ -125,62 +126,5 @@ class SDXLGenerator:
             negative_prompt=negative_prompt,
         )
 
-        # Attempt with ip_adapter_embeds
-        try:
-            result = self.pipe(ip_adapter_image=None, ip_adapter_embeds=image_embeds, **call_kwargs)
-            return result.images
-        except TypeError:
-            pass
-        except ValueError as e:
-            last_err = e
 
-        # Attempt with image_embeds (older/newer variants)
-        try:
-            result = self.pipe(image_embeds=image_embeds, **call_kwargs)
-            return result.images
-        except TypeError:
-            pass
-        except ValueError as e:
-            last_err = e
-
-        # Attempt by explicitly passing added cond kwargs (API variants)
-        try:
-            result = self.pipe(added_cond_kwargs={"image_embeds": image_embeds}, **call_kwargs)
-            return result.images
-        except TypeError:
-            pass
-        except ValueError as e:
-            last_err = e
-
-        # Another naming used in some versions
-        try:
-            result = self.pipe(added_conditions={"image_embeds": image_embeds}, **call_kwargs)
-            return result.images
-        except TypeError:
-            pass
-        except ValueError as e:
-            last_err = e
-
-        # Try explicit embeddings path that constructs added_cond kwargs
-        try:
-            return self._call_with_added_kwargs(
-                prompt=prompt,
-                image_embeds=image_embeds,
-                num_inference_steps=num_inference_steps,
-                guidance_scale=guidance_scale,
-                generator=generator,
-                height=height,
-                width=width,
-                negative_prompt=negative_prompt,
-            )
-        except Exception as e:
-            last_err = e
-
-        # If nothing works, raise a clear error
-        raise RuntimeError(
-            (
-                "Failed to pass IP-Adapter embeddings to SDXL pipeline. "
-                "Tried ip_adapter_embeds, image_embeds, added_cond_kwargs, added_conditions. "
-                "Also attempted explicit added_cond construction. Please upgrade diffusers or adapt argument names."
-            ) + (f" Last error: {last_err}" if 'last_err' in locals() else "")
-        )
+ 
