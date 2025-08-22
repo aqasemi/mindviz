@@ -109,8 +109,6 @@ def main():
             milestones=[warmup_steps]
         )
 
-    scaler = torch.cuda.amp.GradScaler(enabled=args.amp and (args.device.startswith('cuda') or args.device.startswith('cuda:')))
-
     best_val = float('inf')
     model.train()
     for epoch in range(args.epochs):
@@ -121,23 +119,13 @@ def main():
             img_batch = img_batch.to(args.device, non_blocking=True)
 
             optimizer.zero_grad(set_to_none=True)
-            if scaler.is_enabled():
-                with torch.autocast(device_type=("cuda" if args.device.startswith('cuda') else "cpu"), dtype=torch.bfloat16):
-                    pred = model(eeg_batch)
-                    loss = cosine_loss(pred, img_batch)
-                scaler.scale(loss).backward()
-                if args.clip_grad_norm and args.clip_grad_norm > 0:
-                    scaler.unscale_(optimizer)
-                    nn.utils.clip_grad_norm_(model.parameters(), max_norm=args.clip_grad_norm)
-                scaler.step(optimizer)
-                scaler.update()
-            else:
-                pred = model(eeg_batch)
-                loss = cosine_loss(pred, img_batch)
-                loss.backward()
-                if args.clip_grad_norm and args.clip_grad_norm > 0:
-                    nn.utils.clip_grad_norm_(model.parameters(), max_norm=args.clip_grad_norm)
-                optimizer.step()
+
+            pred = model(eeg_batch)
+            loss = cosine_loss(pred, img_batch)
+            loss.backward()
+            if args.clip_grad_norm and args.clip_grad_norm > 0:
+                nn.utils.clip_grad_norm_(model.parameters(), max_norm=args.clip_grad_norm)
+            optimizer.step()
 
             if scheduler is not None:
                 scheduler.step()

@@ -193,7 +193,7 @@ class PLModel(pl.LightningModule):
         logit_scale = self.brain.logit_scale
         logit_scale = self.brain.softplus(logit_scale)
         
-        alpha = 0.9
+        alpha = 0.3
         eeg_loss, img_loss, logits_per_image = self.criterion(eeg_z, img_z, logit_scale)
         contrastive_loss = (eeg_loss.mean() + img_loss.mean()) / 2
         mse_loss = self.mse_loss(eeg_z, img_z)

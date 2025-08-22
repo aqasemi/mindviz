@@ -34,72 +34,31 @@ class SDXLGenerator:
 
         self.pipe = pipe
 
-    def _call_with_added_kwargs(
-        self,
-        prompt: str,
-        image_embeds: torch.Tensor,
-        num_inference_steps: int,
-        guidance_scale: float,
-        generator: Optional[torch.Generator],
-        height: Optional[int],
-        width: Optional[int],
-        negative_prompt: Optional[str],
-    ):
-        pipe = self.pipe
-        device = pipe._execution_device
-
-        # 1) Encode prompt to get token-level and pooled embeddings
-        (
-            prompt_embeds,
-            negative_prompt_embeds,
-            pooled_prompt_embeds,
-            negative_pooled_prompt_embeds,
-        ) = pipe.encode_prompt(
-            prompt=prompt,
-            device=device,
-            num_images_per_prompt=1,
-            do_classifier_free_guidance=guidance_scale > 1.0,
-            negative_prompt=negative_prompt,
-            prompt_embeds=None,
-            negative_prompt_embeds=None,
-            pooled_prompt_embeds=None,
-            negative_pooled_prompt_embeds=None,
-            clip_skip=getattr(pipe, "clip_skip", None),
+        # A baseline pipeline without IP-Adapter for comparison
+        base_pipe = DiffusionPipeline.from_pretrained(
+            model_id,
+            torch_dtype=self.dtype,
+            variant="fp16",
         )
+        base_pipe.to(device)
+        self.base_pipe = base_pipe
 
-        # 2) Prepare time ids
-        if height is None:
-            height = pipe.default_sample_size * pipe.vae_scale_factor
-        if width is None:
-            width = pipe.default_sample_size * pipe.vae_scale_factor
+    def _format_ip_adapter_embeds(self, image_embeds: torch.Tensor, guidance_scale: float) -> list:
+        """Format precomputed IP-Adapter embeddings for diffusers SDXL pipeline.
 
-        text_encoder_projection_dim = (
-            int(pooled_prompt_embeds.shape[-1]) if pipe.text_encoder_2 is None else pipe.text_encoder_2.config.projection_dim
-        )
-        add_time_ids = pipe._get_add_time_ids(
-            original_size=(height, width),
-            crops_coords_top_left=(0, 0),
-            target_size=(height, width),
-            dtype=prompt_embeds.dtype,
-            text_encoder_projection_dim=text_encoder_projection_dim,
-        )
+        Expects input shape [batch, dim]. Returns a list with one tensor shaped
+        [batch, 1, dim] when guidance_scale <= 1, otherwise [2*batch, 1, dim]
+        where the first half are zeros for unconditional CFG.
+        """
+        if image_embeds.ndim == 2:
+            image_embeds = image_embeds.unsqueeze(1)  # [B, 1, D]
 
-        # 3) Build added conditions dict with image_embeds
-        added = {"text_embeds": pooled_prompt_embeds, "time_ids": add_time_ids, "image_embeds": image_embeds}
+        if guidance_scale is not None and guidance_scale > 1.0:
+            zeros = torch.zeros_like(image_embeds)
+            image_embeds = torch.cat([zeros, image_embeds], dim=0)
 
-        # 4) Call pipeline using explicit embeddings and added conditions
-        result = pipe(
-            prompt=None,
-            prompt_embeds=prompt_embeds,
-            pooled_prompt_embeds=pooled_prompt_embeds,
-            num_inference_steps=num_inference_steps,
-            guidance_scale=guidance_scale,
-            generator=generator,
-            height=height,
-            width=width,
-            added_cond_kwargs=added,
-        )
-        return result.images
+        # diffusers expects a list with length equal to the number of IP-Adapters
+        return [image_embeds]
 
     @torch.no_grad()
     def generate(
@@ -114,17 +73,44 @@ class SDXLGenerator:
         negative_prompt: Optional[str] = None,
     ):
         image_embeds = image_embeds.to(device=self.device, dtype=self.dtype)
-        # Explicit added conditions path to satisfy ip_image_proj
-        return self._call_with_added_kwargs(
+
+        # Prepare ip_adapter_image_embeds as expected by diffusers
+        ip_adapter_image_embeds = self._format_ip_adapter_embeds(image_embeds, guidance_scale)
+
+        # Call the pipeline; it will build added_cond_kwargs with text/time and our image embeds
+        result = self.pipe(
             prompt=prompt,
-            image_embeds=image_embeds,
+            negative_prompt=negative_prompt,
             num_inference_steps=num_inference_steps,
             guidance_scale=guidance_scale,
             generator=generator,
             height=height,
             width=width,
-            negative_prompt=negative_prompt,
+            ip_adapter_image_embeds=ip_adapter_image_embeds,
         )
+        return result.images
+
+    @torch.no_grad()
+    def generate_no_adapter(
+        self,
+        prompt: Optional[str] = "",
+        num_inference_steps: int = 4,
+        guidance_scale: float = 0.0,
+        generator: Optional[torch.Generator] = None,
+        height: Optional[int] = None,
+        width: Optional[int] = None,
+        negative_prompt: Optional[str] = None,
+    ):
+        result = self.base_pipe(
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            num_inference_steps=num_inference_steps,
+            guidance_scale=guidance_scale,
+            generator=generator,
+            height=height,
+            width=width,
+        )
+        return result.images
 
 
  
