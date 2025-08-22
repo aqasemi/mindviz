@@ -22,7 +22,7 @@ def main():
     parser.add_argument("--weight_decay", type=float, default=1e-4)
     parser.add_argument("--scheduler", choices=["none", "onecycle", "cosine"], default="cosine")
     parser.add_argument("--warmup_ratio", type=float, default=0.05, help="Linear warmup ratio for cosine schedule")
-    parser.add_argument("--clip_grad_norm", type=float, default=1.0)
+    parser.add_argument("--clip_grad_norm", type=float, default=0.0)
     parser.add_argument("--amp", action="store_true", help="Enable mixed precision (autocast)")
     parser.add_argument("--hidden_dim", type=int, default=2048)
     parser.add_argument("--layers", type=int, default=4)

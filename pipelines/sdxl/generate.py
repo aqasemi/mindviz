@@ -28,25 +28,12 @@ def main():
     data = np.load(args.embeddings)
     eeg = torch.from_numpy(data['eeg_embeddings']).float()
     # If available, use `img_paths` to load ground-truth; otherwise fallback to none
-    img_paths = data.get('img_paths') if isinstance(data, np.lib.npyio.NpzFile) else None
-    # Optional: use img embeddings for debugging quality
-    # img = torch.from_numpy(data['img_embeddings']).float()
-
-    # Prepare numbered GT list if requested
-    numbered_gt_paths = None
-    if args.images_root is not None and os.path.isdir(args.images_root):
-        exts = {'.png', '.jpg', '.jpeg', '.webp'}
-
-        def natural_key(name: str):
-            m = re.search(r"(\d+)", os.path.basename(name))
-            return int(m.group(1)) if m else name
-
-        candidates = [
-            os.path.join(args.images_root, f)
-            for f in os.listdir(args.images_root)
-            if os.path.splitext(f.lower())[1] in exts
-        ]
-        numbered_gt_paths = sorted(candidates, key=natural_key) if candidates else None
+    test_directory = "/ibex/user/qasemiaa/datasets/things_eeg/image_set/test_images"
+    get_imgs = lambda folder_path: [img for img in os.listdir(folder_path) if img.lower().endswith(('.png', '.jpg', '.jpeg'))]
+    img_paths = [d for d in os.listdir(test_directory) if os.path.isdir(os.path.join(test_directory, d))]
+    img_paths.sort()
+    img_paths = [i + "/" + get_imgs(os.path.join(test_directory, i))[0] for i in img_paths]
+    rl_img = torch.from_numpy(data['img_embeddings']).float()
 
     # Load projector
     ckpt = torch.load(args.weights, map_location='cpu')
@@ -72,37 +59,10 @@ def main():
             img_ip = gen.generate(ip_embed, prompt=args.prompt, num_inference_steps=args.steps, guidance_scale=args.guidance)[0]
 
             # Baseline without IP-Adapter
-            img_noip = gen.generate_no_adapter(prompt=args.prompt, num_inference_steps=args.steps, guidance_scale=args.guidance)[0]
+            img_noip = gen.generate(eeg_i, prompt=args.prompt, num_inference_steps=args.steps, guidance_scale=args.guidance)[0]
+            gt_img = Image.open(os.path.join(args.images_root, test_directory, img_paths[i])).convert('RGB')
 
-            # Ground-truth image, if paths are provided
-            gt_img = None
-            try:
-                if img_paths is not None:
-                    rel = img_paths[i] if isinstance(img_paths, np.ndarray) else None
-                    if rel is not None:
-                        if args.images_root is not None:
-                            full = os.path.join(args.images_root, rel)
-                            if os.path.exists(full):
-                                gt_img = Image.open(full).convert('RGB')
-                        else:
-                            # Fallback: try common defaults
-                            proj_root = os.getcwd()
-                            candidates = [
-                                os.path.join(proj_root, 'data', 'things-eeg', 'image_set_resize'),
-                                os.path.join(proj_root, 'data', 'things-meg', 'Image_set_Resize'),
-                                os.path.join(proj_root, 'data', 'things-meg', 'image_set_resize'),
-                            ]
-                            for base in candidates:
-                                full = os.path.join(base, rel)
-                                if os.path.exists(full):
-                                    gt_img = Image.open(full).convert('RGB')
-                                    break
-                elif numbered_gt_paths is not None and i < len(numbered_gt_paths):
-                    gt_img = Image.open(numbered_gt_paths[i]).convert('RGB')
-            except Exception:
-                gt_img = None
-
-            # Compose strip: [GT | no-IP | IP]
+            # Compose strip: [GT | no-EEGIP | IP]
             tiles = []
             if gt_img is not None:
                 tiles.append(gt_img)
