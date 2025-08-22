@@ -1,0 +1,57 @@
+import os
+import argparse
+import torch
+from PIL import Image
+
+from pipelines.sdxl.generator import SDXLGenerator
+from pipelines.sdxl.projector import EEGToIPAdapterProjection
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--embeddings", required=True, help="Path to embeddings.npz (test set)")
+    parser.add_argument("--weights", required=True, help="Path to trained projector .pt")
+    parser.add_argument("--out", default="exp/sdxl_recon")
+    parser.add_argument("--prompt", default="")
+    parser.add_argument("--num_images", type=int, default=20)
+    parser.add_argument("--device", default="cuda")
+    parser.add_argument("--steps", type=int, default=4)
+    parser.add_argument("--guidance", type=float, default=0.0)
+    args = parser.parse_args()
+
+    os.makedirs(args.out, exist_ok=True)
+
+    # Load embeddings npz
+    import numpy as np
+    data = np.load(args.embeddings)
+    eeg = torch.from_numpy(data['eeg_embeddings']).float()
+    # Optional: use img embeddings for debugging quality
+    # img = torch.from_numpy(data['img_embeddings']).float()
+
+    # Load projector
+    ckpt = torch.load(args.weights, map_location='cpu')
+    cfg = ckpt['config']
+    eeg_dim = eeg.shape[-1]
+    model = EEGToIPAdapterProjection(
+        eeg_dim=eeg_dim,
+        ip_adapter_dim=cfg.get('ip_adapter_dim', 1024),
+        hidden_dim=cfg.get('hidden_dim', 2048),
+        num_layers=cfg.get('layers', 4),
+        dropout=cfg.get('dropout', 0.1),
+    ).to(args.device)
+    model.load_state_dict(ckpt['model_state'])
+    model.eval()
+
+    # Setup SDXL generator
+    gen = SDXLGenerator(device=args.device)
+
+    with torch.no_grad():
+        for i in range(min(args.num_images, eeg.size(0))):
+            eeg_i = eeg[i:i+1].to(args.device)
+            ip_embed = model(eeg_i)
+            images = gen.generate(ip_embed, prompt=args.prompt, num_inference_steps=args.steps, guidance_scale=args.guidance)
+            images[0].save(os.path.join(args.out, f"{i:04d}.png"))
+
+
+if __name__ == "__main__":
+    main()
