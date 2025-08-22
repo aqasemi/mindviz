@@ -64,6 +64,8 @@ class SDXLGenerator:
             return result.images
         except TypeError:
             pass
+        except ValueError as e:
+            last_err = e
 
         # Attempt with image_embeds (older/newer variants)
         try:
@@ -71,9 +73,32 @@ class SDXLGenerator:
             return result.images
         except TypeError:
             pass
+        except ValueError as e:
+            last_err = e
+
+        # Attempt by explicitly passing added cond kwargs (API variants)
+        try:
+            result = self.pipe(added_cond_kwargs={"image_embeds": image_embeds}, **call_kwargs)
+            return result.images
+        except TypeError:
+            pass
+        except ValueError as e:
+            last_err = e
+
+        # Another naming used in some versions
+        try:
+            result = self.pipe(added_conditions={"image_embeds": image_embeds}, **call_kwargs)
+            return result.images
+        except TypeError:
+            pass
+        except ValueError as e:
+            last_err = e
 
         # If neither works, raise a clear error
         raise RuntimeError(
-            "Your diffusers version does not support passing IP-Adapter embeddings directly. "
-            "Please upgrade diffusers or implement a wrapper that exposes a generate method accepting 'ip_adapter_embeds'."
+            (
+                "Failed to pass IP-Adapter embeddings to SDXL pipeline. "
+                "Tried ip_adapter_embeds, image_embeds, added_cond_kwargs, added_conditions. "
+                "Please upgrade diffusers or adapt argument names."
+            ) + (f" Last error: {last_err}" if 'last_err' in locals() else "")
         )
