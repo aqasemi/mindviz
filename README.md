@@ -1,139 +1,61 @@
-# Uncertainty-aware Blur Prior (UBP)
+# EEG-to-Image Reconstruction ( MindViz )
 
-## Table of Contents
-- [Introduction](#introduction)
-- [Repo Architecture](#repo-architecture)
-- [Environment Setup](#environment-setup)
-- [Data Preparation](#data-preparation)
-- [Run](#run)
-- [Acknowledgement](#acknowledgement)
+This project implements a novel **EEG-to-Image reconstruction** framework using text-guided diffusion.  
+Instead of mapping EEG signals directly to pixels, we align EEG-derived embeddings with text prompts.  
+An EEG encoder is trained alongside a text retrieval model to output class-level descriptions, which are then fed into a Stable Diffusion model to generate images.  
 
-## Introduction
-This is the official implementation for [Bridging the Vision-Brain Gap with an Uncertainty-Aware Blur Prior](https://arxiv.org/abs/2503.04207) (CVPR 2025) with various brain and CLIP encoders. **SOTA** result in the EEG-Vision Retrieval Task.
+By leveraging EEG’s high-level semantic cues, our method avoids brittle pixel-level decoding and produces reconstructions that are both more coherent and category-faithful.
 
-<p align="center">
-<img src="./assets/motivation.png" >
-</p>
+---
 
+## 🚀 Methodology of MindViz
 
-## Repo Architecture
-```
-UBP/                           # Root directory
-├── README.md
-├── base                       # Core implementation files
-│   ├── data.py                # Data loading
-│   ├── eeg_backbone.py        # EEG encoder backbone implementation
-│   ├── inpating_data.py       # Inpainting data module for preprocessing
-│   └── utils.py               # Utility functions
-├── configs
-│   ├── baseline.yaml          # Configuration for baseline experiments
-│   └── ubp.yaml               # Configuration for UBP experiments
-├── data                       # Directory for datasets
-│   └── things-eeg
-│       ├── Image_feature      # Pre-extracted image features
-│       ├── Image_set          # Original image dataset
-│       ├── Image_set_Resize   # Resized image dataset
-│       ├── Preprocessed_data_250Hz_whiten # Preprocessed EEG data (whitened)
-│       └── Raw_data
-├── exp                        # Directory for experiment results
-├── main.py                    # Main script for running experiments
-├── preprocess
-│   ├── process_eeg_whiten.py  # Script to preprocess and whiten EEG data
-│   └── process_resize.py      # Script to resize image dataset
-├── requirements.txt           # List of required Python packages
-└── scripts
-    ├── bash_preprocess.sh     # Bash script for preprocessing data
-    └── exp.sh                 # Bash script for running experiments
-```
-## Environment Setup
-- Python 3.8.19
-- Cuda 12.0
-- PyTorch 2.4.1
-- Required libraries are listed in `requirements.txt`.
+### Dual-Backbone Architecture
+- **Image Backbone (ViT-H/14):** Maps EEG features into a visual feature embedding.  
+- **Text Backbone (ResNet-50):** Predicts class-level text prompts aligned with EEG features.  
+- These two pathways capture complementary strengths for EEG representation.
 
-```
-pip install -r requirements.txt
-```
+### Text-Guided Generation
+- The text prompts predicted from EEG are used to **condition Stable Diffusion**.  
+- This allows the diffusion model to generate images that reflect the semantic content of the EEG signals.  
 
-## Data Preparation
-1. Download the Things-image from the [OSF repository](https://osf.io/jum2f/files/osfstorage), Things-EEG from the [OSF repository](https://osf.io/anp5v/files/osfstorage), Things-EEG from [Openneuro repository](https://openneuro.org/datasets/ds004212/versions/2.0.1), and put them in the `data` dir. (We provided the processed Things-EEG-MEG data on [BaiduNetdisk](https://pan.baidu.com/s/1ZZWBrrp2Ly2ZOBHKT0fmTA?pwd=9j22) and [Huggingface](preparing). If the processed data is downloaded, the following two processing steps can be skipped.
+### Novelty
+- Previous works treat EEG-to-image as a **denoising problem**.  
+- Our method reframes it as a **semantic guidance problem**, where text derived from EEG directs generation, leveraging high retrieval scores in the reconstriction task.  
+- This shift leverages EEG’s strength in encoding **abstract semantics** and avoids brittle pixel-level mappings.  
 
-Recommendation: things.zip, things-eeg.zip, things-meg.zip is necessary, other files are optional.
+---
 
-3. Convert the data to .pt format using the preprocessing script for all subjects:
+## ⚙️ Installation
+*(Instructions for setting up the environment and installing dependencies will be added here.)*
 
-```
-/bin/bash scripts/bash_preprocess.sh
-```
+---
 
-3. Resize the downloaded images using the provided script:
+## 🏋️ Training
+*(Detailed training instructions, including data preparation and training commands, will be added here.)*
 
-```
-python preprocess/process_resize.py --type eeg
-python preprocess/process_resize.py --type meg
-```
+---
 
-Finally, we have the directory tree:
-```
-├── data
-    ├── things-eeg
-        ├── Image_set
-        ├── Image_set_Resize
-        ├── Raw_data (optional)
-        ├── Preprocessed_data_250Hz_whiten
-    ├── things
-        ├── THINGS
-            ├── Images
-            ├── Metadata
-    ├── things-meg
-        ├── Image_set
-        ├── Image_set_Resize
-        ├── ds004212-download (Raw_data, optional)
-        ├── Preprocessed_data
-```
-## Run
-To run the experiments using the provided configurations, execute:
-```
-/bin/bash scripts/exp.sh
-```
+## 🎨 Inference
+*(Guidance for running the trained model to generate images from EEG data will be added here.)*
 
-```
-brain_backbone="EEGProjectLayer"
-vision_backbone="RN50"
-i="01"
-seed=0
-python main.py --config configs/ubp.yaml --subjects sub-$i --seed $seed --exp_setting intra-subject --brain_backbone $brain_backbone --vision_backbone $vision_backbone --epoch 50 --lr 1e-4;
+---
 
-```
-## Acknowledgement
-We acknowledge the contributions of the following datasets:
-- [A large and rich EEG dataset for modeling human visual object recognition](https://www.sciencedirect.com/science/article/pii/S1053811922008758) [THINGS-EEG]
-- [
-THINGS-data, a multimodal collection of large-scale datasets for investigating object representations in human brain and behavior](https://pubmed.ncbi.nlm.nih.gov/36847339/) [THINGS-MEG]
+## 📊 Results
 
-The code is inspired by prior awesome works on neural decoding tasks:
-- [Decoding Natural Images from EEG for Object Recognition](https://github.com/eeyhsong/NICE-EEG) [ICLR 2024]
-- [Visual Decoding and Reconstruction via EEG Embeddings with Guided Diffusion](https://github.com/dongyangli-del/EEG_Image_decode) [NeurIPS 2024]
-- [Decoding Visual Neural Representations by Multimodal Learning of Brain-Visual-Linguistic Features](https://github.com/ChangdeDu/BraVL)  [TPAMI 2023]
+- Reconstructions are **more coherent and semantically faithful** than baselines.  
+- Compared to ATM retrieval and Uncertainty-Aware Blur Prior (UBP), our method recovers more accurate object categories.  
 
-Uncertainy-aware work related to multimodality:
-- [Trusted multi-view classification with dynamic evidential fusion](https://github.com/hanmenghan/TMC) [TPAMI 2022]
-- [Provable Dynamic Fusion for Low-Quality Multimodal Data](https://github.com/QingyangZhang/QMF) (ICML 2023)
-- [Reliable Conflictive Multi-View Learning](https://github.com/jiajunsi/RCML) (AAAI 2024, Outstanding Paper)
+---
 
-## Citation
-If you find our work helpful, please cite:
-```bibtex
-@inproceedings{wu2025bridging,
-  title={Bridging the Vision-Brain Gap with an Uncertainty-Aware Blur Prior},
-  author={Wu, Haitao and Li, Qing and Zhang, Changqing and He, Zhen and Ying, Xiaomin},
-  booktitle={Proceedings of the Computer Vision and Pattern Recognition Conference},
-  pages={2246--2257},
-  year={2025}
-}
-```
+## 👥 Contributors
+- Abdulaziz Alkhateeb  
+- Amjad Alqasemi  
+- Husain Althagafi  
+- Abdulellah Mojallad  
+- Musa Ibn Rashid  
 
+---
 
-## Contact us
-For any additional questions, feel free to email wuhaitao@tju.edu.cn .
-
+## 📜 License
+*(License information to be added here.)*
