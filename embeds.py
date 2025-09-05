@@ -24,7 +24,6 @@ from base.utils import update_config , ClipLoss, instantiate_from_config, get_de
 device = get_device('auto')
 print(f"Using device: {device}")
 
-# --- NEW UTILITY FUNCTION ---
 def generate_and_save_embeddings_from_model(model, dataloader, save_path, device):
     """
     Generates embeddings for a dataset using a trained model and saves them.
@@ -70,7 +69,6 @@ def generate_and_save_embeddings_from_model(model, dataloader, save_path, device
     print(f"Embeddings saved to {save_path}")
 
 
-# --- NEW UTILITY FUNCTION: Save Top-10 retrieval images for N samples ---
 def save_top10_retrieval_images_for_samples(model, dataset, save_root, num_samples=10):
     """
     For the first `num_samples` items in `dataset`, compute the EEG embedding
@@ -106,15 +104,12 @@ def save_top10_retrieval_images_for_samples(model, dataset, save_root, num_sampl
             eeg_z = model.brain(eeg)
             eeg_z = eeg_z / eeg_z.norm(dim=-1, keepdim=True)
 
-            # Similarity against full gallery
             sims = (eeg_z @ image_features.T).squeeze(0)
             topk = torch.topk(sims, k=min(10, image_features.shape[0]), dim=-1).indices.tolist()
 
-            # Prepare destination directory
             dest_dir = os.path.join(save_root, 'retrieval_top10', f'sample_{i:03d}')
             os.makedirs(dest_dir, exist_ok=True)
 
-            # Optionally save the ground-truth image for reference
             gt_rel = sample['img_path']
             gt_src = os.path.join(images_base_dir, gt_rel)
             gt_dst = os.path.join(dest_dir, f'gt__{os.path.basename(gt_rel)}')
@@ -131,7 +126,6 @@ def save_top10_retrieval_images_for_samples(model, dataset, save_root, num_sampl
                 try:
                     shutil.copyfile(src_path, dst_path)
                 except Exception:
-                    # Skip if file issues occur
                     continue
 
     print(f"Saved top-10 retrieval images for {min(num_samples, len(dataset))} samples under {os.path.join(save_root, 'retrieval_top10')}.")
@@ -145,7 +139,7 @@ def load_model(config, train_loader, test_loader, log_dir):
         model[k] = instantiate_from_config(v)
 
     pl_model = PLModel(model, config, train_loader, test_loader)
-    pl_model.log_dir = log_dir # Set the log_dir attribute for later use
+    pl_model.log_dir = log_dir 
     return pl_model
 
 class PLModel(pl.LightningModule):
@@ -171,10 +165,7 @@ class PLModel(pl.LightningModule):
         self.mAP_total = 0
         self.match_similarities = []
 
-        # --- MODIFIED ---
-        # Add a placeholder for the logging directory
         self.log_dir = None
-        # Add lists to store test outputs for later saving
         self.test_eeg_embeddings = []
         self.test_img_embeddings = []
         self.test_indices = []
@@ -292,7 +283,6 @@ class PLModel(pl.LightningModule):
         batch_size = batch['idx'].shape[0]
         eeg_z, img_z, loss = self(batch)
         
-        # --- MODIFIED: Store embeddings and indices for saving later ---
         self.test_eeg_embeddings.append(eeg_z.cpu().detach())
         self.test_img_embeddings.append(img_z.cpu().detach())
         self.test_indices.append(batch['idx'].cpu().detach())
@@ -305,7 +295,7 @@ class PLModel(pl.LightningModule):
         label = torch.arange(0, batch_size).to(self.device)
         self.all_true_labels.extend(label.cpu().numpy())
 
-        #compute sim and map
+        # compute sim and map
         self.match_similarities.extend(similarity.diag().detach().cpu().tolist())
 
         for i in range(similarity.shape[0]):
@@ -319,9 +309,7 @@ class PLModel(pl.LightningModule):
         return loss
         
     def on_test_epoch_end(self):
-        # --- MODIFIED: Save test embeddings at the beginning of the hook ---
-        if self.test_eeg_embeddings:  # Only run if test_step was executed
-            # Concatenate local results first
+        if self.test_eeg_embeddings:
             local_eeg = torch.cat(self.test_eeg_embeddings, dim=0)
             local_img = torch.cat(self.test_img_embeddings, dim=0)
             local_idx = torch.cat(self.test_indices, dim=0)
@@ -353,12 +341,10 @@ class PLModel(pl.LightningModule):
                          indices=all_indices)
                 print(f"Test embeddings saved to {save_path}")
 
-        # Clear lists on all ranks for any subsequent test runs
         self.test_eeg_embeddings.clear()
         self.test_img_embeddings.clear()
         self.test_indices.clear()
 
-        # --- Original on_test_epoch_end logic continues below ---
         all_predicted_classes = np.concatenate(self.all_predicted_classes, axis=0)
         all_true_labels = np.array(self.all_true_labels)
         
@@ -386,7 +372,6 @@ class PLModel(pl.LightningModule):
         """
         Configure the optimizer and the OneCycleLR learning rate scheduler.
         """
-        # Create the optimizer from the config file
         optimizer = globals()[self.config['train']['optimizer']](
             self.parameters(),
             lr=self.config['train']['lr'],
@@ -528,7 +513,6 @@ def main():
     ckpt_path = 'last'
     trainer.fit(pl_model, train_dataloaders=train_loader, val_dataloaders=val_loader, ckpt_path=ckpt_path)
 
-    # --- MODIFIED: Generate and save training embeddings after training is complete ---
     if trainer.is_global_zero:
         print("\nGenerating training embeddings with final model...")
         # Create a new dataloader from the training dataset with shuffle=False for ordered generation
@@ -542,15 +526,12 @@ def main():
         train_save_path = os.path.join(log_dir, 'train_embeddings.npz')
         generate_and_save_embeddings_from_model(pl_model, train_loader_for_generation, train_save_path, device)
 
-        # After training, save top-10 retrieval images for first 10 test samples
         print("\nSaving top-10 retrieval images for 10 test samples...")
         save_top10_retrieval_images_for_samples(pl_model, test_loader.dataset, log_dir, num_samples=10)
 
-    # Use a barrier to make sure all processes wait for rank 0 to finish saving before testing
     if torch.distributed.is_initialized() and trainer.world_size > 1:
         torch.distributed.barrier()
 
-    # --- Test the model (this will also generate and save test embeddings) ---
     if config['exp_setting'] == 'inter-subject':
         test_results = trainer.test(ckpt_path='best', dataloaders=test_loader)
     else:
